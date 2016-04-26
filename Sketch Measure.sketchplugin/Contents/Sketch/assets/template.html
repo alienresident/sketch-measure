@@ -1,7 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="">
+    <meta name="author" content="">
+    <title>Viewer</title>
+    <style type="text/css">
+    <!-- cssNormalize -->
+    <!-- cssApp -->
+    </style>
+    <script type="text/javascript">
+    <!-- jsjQuery -->
+    <!-- jsApp -->
+    <!-- jsSpec -->
     </script>
+    <script type="text/javascript" src="artboards.js"></script>
+    <script type="text/javascript" src="slices.js"></script>
+    <script type="text/javascript" src="colors.js"></script>
   </head>
 
-  <body class="off">
+ <body class="off">
     <div class="header">
       <div class="art-name">
         <h1 id="artboard" class="artboard-name"><span></span></h1>
@@ -111,38 +131,39 @@
     </script>
 
     <div id="sidebar" class="sidebar sideoff">
+      <h2 id="layer_name"></h2>
       <div id="properties">
-        <h3 id="side-title">PROPERTIES</h3>
+        <h3 class="side-title">PROPERTIES</h3>
         <ul></ul>
       </div>
 
       <div id="typeface">
-        <h3 id="side-title">TYPEFACE</h3>
+        <h3 class="side-title">TYPEFACE</h3>
         <ul></ul>
       </div>
 
       <div id="content">
-        <h3 id="side-title">CONTENT</h3>
+        <h3 class="side-title">CONTENT</h3>
         <ul></ul>
       </div>
 
       <div id="fills">
-        <h3 id="side-title">FILLS</h3>
+        <h3 class="side-title">FILLS</h3>
         <ul></ul>
       </div>
 
       <div id="borders">
-        <h3 id="side-title">BORDERS</h3>
+        <h3 class="side-title">BORDERS</h3>
         <ul></ul>
       </div>
 
       <div id="shadows">
-        <h3 id="side-title">SHADOWS</h3>
+        <h3 class="side-title">SHADOWS</h3>
         <ul></ul>
       </div>
 
       <div id="exportable">
-        <h3 id="side-title">EXPORTABLE</h3>
+        <h3 class="side-title">EXPORTABLE</h3>
         <ul>
           <li></li>
         </ul>
@@ -162,15 +183,16 @@
       <script id="type-template" type="application/template">
         <li><strong>${face}</strong></li>
         <li><label>size:</label> <strong>${size}</strong></li>
+        <li><label>character:</label> <strong>${character}</strong></li>
         <li><label>line:</label> <strong>${line}</strong></li>
       </script>
 
       <script id="content-template" type="application/template">
-        <li><strong>${content}</strong></li>
+        <li><textarea rows="3" onclick="this.select()" readonly="readonly">${content}</textarea></li>
       </script>
 
       <script id="color-template" type="application/template">
-        <li><i class="connect"></i><em class="color" style="background-color: rgba(${r}, ${g}, ${b}, ${a})"></em> <strong class="color-text normal">${hex}, ${alpha}</strong><strong class="color-text rgba">rgba(${r}, ${g}, ${b}, ${a})</strong><strong class="color-text argb">${argb}</strong> </li>
+        <li><i class="connect"></i><em class="color" style="background-color: rgba(${r}, ${g}, ${b}, ${a})"></em> <strong class="color-name">${name}</strong> <span class="color-info"><strong class="color-text normal">${hex}, ${alpha}</strong><strong class="color-text rgba">rgba(${r}, ${g}, ${b}, ${a})</strong><strong class="color-text argb">${argb}</strong></span> </li>
       </script>
 
       <script id="border-template" type="application/template">

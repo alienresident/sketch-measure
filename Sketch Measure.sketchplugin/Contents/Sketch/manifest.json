@@ -107,6 +107,13 @@
             "script": "measure.sketchscript"
         },
         {
+            "name": "Color palette",
+            "identifier": "color-palette",
+            "shortcut": "",
+            "handler": "colorPalette",
+            "script": "measure.sketchscript"
+        },
+        {
             "name": "Toggle Theme",
             "identifier": "toggle-theme",
             "shortcut": "",
@@ -129,6 +136,7 @@
             "toggle-locked",
             "lite-width",
             "lite-height",
+            "color-palette",
             "spec-export",
             {
                 "title": "Settings",
@@ -143,7 +151,7 @@
         "title" : "Measure"
     },
     "identifier": "com.utom.sketch-measure",
-    "version": "0.9.21",
+    "version": "0.9.4.3",
     "description" : "A measure tool for measurements & design specs.",
     "authorEmail" : "utombox@gmail.com",
     "name" : "Sketch Measure"

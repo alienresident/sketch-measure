@@ -34,11 +34,13 @@ I18N["zh-Hans"] = {
     "Position bottom"                                   : "下侧",
     "Position left"                                     : "左侧",
     "Show position:"                                    : "显示位置:",
-    "Color hex, E.g. #FFFFFF 100%"                      : "Color hex, E.g. #FFFFFF 100%",
-    "ARGB hex, E.g. #FFFFFFFF"                          : "ARGB hex, E.g. #FFFFFFFF",
-    "RGBA CSS, E.g. rgba(255, 255, 255, 1)"             : "RGBA CSS, E.g. rgba(255, 255, 255, 1)",
-    "Color format"                                      : "Color format",
-    "Remeasure all guides to see the new theme."        : "Remeasure all guides to see the new theme."
+    "Color hex, E.g. #FFFFFF 100%"                      : "颜色 hex [#FFFFFF 100%]",
+    "ARGB hex, E.g. #FFFFFFFF"                          : "ARGB hex [#FFFFFFFF]",
+    "RGBA CSS, E.g. rgba(255, 255, 255, 1)"             : "RGBA CSS [rgba(255, 255, 255, 1)]",
+    "Color format"                                      : "颜色格式",
+    "Remeasure all guides to see the new theme."        : "Remeasure all guides to see the new theme.",
+    "Show color name"                                   : "显示颜色名称",
+    "untitled"                                          : "未命名"
 };
  
 function _(str){
@@ -48,31 +50,35 @@ function _(str){
 var com = com || {};
 
 com.utom = {
-    configsGroup: undefined,
-    configsURL: undefined,
+    configsPage: undefined,
+    configsColors: undefined,
+    prefix: "SMConfigs",
     configs: undefined,
     context: undefined,
+    command: undefined,
     document: undefined,
     selection: undefined,
+    pages: undefined,
     page: undefined,
     artboard: undefined,
     current: undefined,
     styles: undefined,
     isPercentage: false,
-    init: function(context){
+    init: function(context, currentIsArtboard){
         this.context = context;
         this.document = context.document;
+        this.command = context.command;
         this.selection = context.selection;
+        this.pages = this.document.pages();
         this.page = this.document.currentPage();
         this.artboard = this.page.currentArtboard();
         this.current = this.artboard || this.page;
-        this.configsURL = this.page;
-        if(!this.is(this.current, MSArtboardGroup)){
+        if(currentIsArtboard && !(this.is(this.current, MSArtboardGroup) || this.is(this.current, MSSymbolMaster))){
             this.message(_("You need an artboard."));
             return false;
         }
 
-        this.getConfigs();
+        this.initConfigs();
     },
     extend: function( options, target ){
         var target = target || this;
@@ -84,7 +90,7 @@ com.utom = {
     },
     is: function(layer, theClass){
         if(!layer) return false;
-        var klass = [layer class];
+        var klass = layer.class();
         return klass === theClass;
     },
     isIntersect: function(lf, tf){
@@ -165,6 +171,10 @@ com.utom.extend({
           unit = "gu";
         }
 
+        if (scale === 14) {
+          unit = "rem";
+        }
+
         return length + unit;
     },
     updatePercentLength: function(length, width){
@@ -220,7 +230,8 @@ com.utom.extend({
         var layerStyles = this.document.documentData().layerStyles();
         var layerStylesLibrary = layerStyles.objectsSortedByName();
         var layerStyle = this.find(name, layerStylesLibrary, true);
-        layerStyle = ( !layerStyle || this.is(layerStyle, MSSharedLayerStyle))? layerStyle: layerStyle[0];
+        layerStyle = ( !layerStyle || this.is(layerStyle, MSSharedStyle))? layerStyle: layerStyle[0];
+
         var alpha = alpha || 1;
 
         if( layerStyle == false ){
@@ -253,7 +264,8 @@ com.utom.extend({
         var textStyles = this.document.documentData().layerTextStyles();
         var textStylesLibrary = textStyles.objectsSortedByName();
         var textStyle = this.find(name, textStylesLibrary, true);
-        textStyle = (!textStyle || this.is(textStyle, MSSharedLayerStyle))? textStyle: textStyle[0];
+        textStyle = (!textStyle || this.is(textStyle, MSSharedStyle))? textStyle: textStyle[0];
+
         var alpha = alpha || 1;
 
         if( textStyle == false ){
@@ -282,12 +294,41 @@ com.utom.extend({
 
 //Configs
 com.utom.extend({
-    getConfigs: function(){
-        var configsGroup = this.find("@Sketch Measure Configs", this.configsURL);
-        configsGroup = (!configsGroup || this.is(configsGroup, MSLayerGroup))? configsGroup: configsGroup[0];
-        var textLayer;
+    getConfigs: function(container){
+        var container = (container)? container: this.page;
+        var command = this.command;
+        var prefix = this.prefix;
+        var configsData = [command valueForKey: prefix onLayer: container];
+        return JSON.parse(configsData);
+    },
+    setConfigs: function(newConfigs, container){
+        var container = (container)? container: this.page;
+        var command = this.command;
+        var prefix = this.prefix;
+        var configs = this.extend(newConfigs, this.getConfigs(container) || {});
+        configs.timestamp = new Date().getTime();
 
-        if(configsGroup == false){
+        var configsData = JSON.stringify(configs);
+        [command setValue: configsData forKey: prefix onLayer: container];
+        return configs;
+    },
+    removeConfigs: function(container){
+        var container = (container)? container: this.page;
+        var command = this.command;
+        var prefix = this.prefix;
+
+        [command setValue: null forKey: prefix onLayer: container];
+    },
+    initConfigs: function(){
+        this.configs = this.getConfigs();
+        
+        this.configsPage = this.find("Sketch Measure", this.pages, true);
+
+        if(this.configsPage){
+            this.configsColors = this.find("Color Palette", this.configsPage);
+        }
+
+        if(!this.configs){
             var defaultConfigs = {};
             var resolution = this.resolutionSetting();
 
@@ -298,42 +339,11 @@ com.utom.extend({
             defaultConfigs.resolution = resolution;
             defaultConfigs.property = ["color", "border"];
             defaultConfigs.colorFormat = 0;
-            this.setConfigs(defaultConfigs);
-        }
-        else{
-            var textLayer = configsGroup.children().firstObject();
-            this.configs = JSON.parse(textLayer.stringValue());
-        }
-    },
-    setConfigs: function(configs){
-        var configsGroup = this.find("@Sketch Measure Configs", this.configsURL);
-        configsGroup = (!configsGroup || this.is(configsGroup, MSLayerGroup))? configsGroup: configsGroup[0];
-        var textLayer;
-
-        this.configs = this.configs || {};
-
-
-        this.extend(configs, this.configs);
-        this.configs.timestamp = new Date().getTime();
-
-        if(configsGroup == false){
-            configsGroup = this.addGroup(this.configsURL);
-            configsGroup.setName("@Sketch Measure Configs");
-
-            textLayer = this.addText(configsGroup);
-            textLayer.setName("Configs");
-        }
-        else{
-            textLayer = configsGroup.children().firstObject();
+            this.configs = this.setConfigs(defaultConfigs);
         }
 
-        textLayer.setStringValue(JSON.stringify(this.configs));
+        
 
-        textLayer.setTextBehaviour(1);
-        textLayer.setTextBehaviour(0);
-        configsGroup.resizeRoot(true);
-        configsGroup.setIsLocked(true);
-        configsGroup.setIsVisible(false);
     }
 });
 
@@ -381,8 +391,12 @@ com.utom.extend({
             scale: 4
         },
         {
-            name: "Ubuntu Grid Units (27px)",
+            name: "Ubuntu Grid (27px)",
             scale: 27
+        },
+        {
+            name: "CSS Rem (14px)",
+            scale: 14
         },
     ],
     resolutionSetting: function(){
@@ -522,7 +536,7 @@ com.utom.extend({
         var labelWidth = labelDims.width;
         var labelHeight = labelDims.height;
 
-        label.setName("" + frame.width);
+        label.setName("label");
         labelFrame.setWidth(labelWidth);
         labelFrame.setHeight(labelHeight);
 
@@ -577,9 +591,11 @@ com.utom.extend({
         textFrame.setX(labelX + labelDims.padding);
         textFrame.setY(labelY + labelDims.padding);
 
+        this.setConfigs({original: frame.width}, container);
+
         this.removeLayer(shape);
         this.removeLayer(textL);
-        container.resizeRoot(true);
+        container.resizeToFitChildrenWithOption(0);
 
         return container;
     },
@@ -643,7 +659,7 @@ com.utom.extend({
 
         var arrow = shape.duplicate();
         var arrowFrame = arrow.absoluteRect();
-        arrow.setName("" + frame.width);
+        arrow.setName("arrow");
         arrowFrame.setWidth(1);
         arrowFrame.setHeight(6);
         arrowFrame.setX( frame.x + this.mathHalf(frame.width - 1)  );
@@ -687,9 +703,11 @@ com.utom.extend({
             textFrame.setX( tFrame.x - (tFrame.maxX - aFrame.maxX) );
         }
 
+        this.setConfigs({original: frame.width}, container);
+
         this.removeLayer(shape);
         this.removeLayer(textL);
-        container.resizeRoot(true);
+        container.resizeToFitChildrenWithOption(0);
 
         return container;
     },
@@ -762,7 +780,7 @@ com.utom.extend({
         var labelWidth = labelDims.width;
         var labelHeight = labelDims.height;
 
-        label.setName("" + frame.height);
+        label.setName("label");
         labelFrame.setWidth( labelWidth );
         labelFrame.setHeight( labelHeight );
 
@@ -817,9 +835,11 @@ com.utom.extend({
         textFrame.setX(labelX + labelDims.padding);
         textFrame.setY(labelY + labelDims.padding);
 
+        this.setConfigs({original: frame.height}, container);
+
         this.removeLayer(shape);
         this.removeLayer(textL);
-        container.resizeRoot(true);
+        container.resizeToFitChildrenWithOption(0);
 
         return container;
     },
@@ -883,7 +903,7 @@ com.utom.extend({
 
         var arrow = shape.duplicate();
         var arrowFrame = arrow.absoluteRect();
-        arrow.setName("" + frame.height);
+        arrow.setName("arrow");
         arrowFrame.setWidth(6);
         arrowFrame.setHeight(1);
         arrowFrame.setY( frame.y + this.mathHalf(frame.height - 1)  );
@@ -917,9 +937,11 @@ com.utom.extend({
             }
         }
 
+        this.setConfigs({original: frame.height}, container);
+
         this.removeLayer(shape);
         this.removeLayer(textL);
-        container.resizeRoot(true);
+        container.resizeToFitChildrenWithOption(0);
 
         return container;
     }
@@ -1097,7 +1119,7 @@ com.utom.extend({
         overlayerFrame.setWidth(frame.width);
         overlayerFrame.setHeight(frame.height);
 
-        container.resizeRoot(true);
+        container.resizeToFitChildrenWithOption(0);
     }
 });
 
@@ -1177,7 +1199,7 @@ com.utom.extend({
             container.addLayers([text]);
 
             text.setStyle(textStyle);
-            if(configs) text.setName(JSON.stringify(configs));
+            if(configs) this.setConfigs(configs, container);
         }
 
         textFrameAbsoluteRect = text.absoluteRect();
@@ -1224,7 +1246,7 @@ com.utom.extend({
 
         this.removeLayer(shape);
 
-        container.resizeRoot(true);
+        container.resizeToFitChildrenWithOption(0);
 
         return container;
     },
@@ -1258,6 +1280,10 @@ com.utom.extend({
             slug: "font-size"
         },
         {
+            name: _("Character"),
+            slug: "character"
+        },
+        {
             name: _("Line height"),
             slug: "line-height"
         },
@@ -1275,11 +1301,12 @@ com.utom.extend({
     colorFormats: [_("Color hex, E.g. #FFFFFF 100%"), _("ARGB hex, E.g. #FFFFFFFF"), _("RGBA CSS, E.g. rgba(255, 255, 255, 1)")],
     propertyDialog: function(){
         var cellWidth = 250;
-        var cellHeight = 190;
+        var cellHeight = 200;
         var allProperty = this.allProperty;
         var propertyConfigs = this.configs.property;
         var colorFormatConfigs = this.configs.colorFormat || 0;
         var propertyPosition = this.configs.propertyPosition || 0;
+        var showColorName = this.configs.showColorName || 0;
 
         var alert = COSAlertWindow.new();
         alert.setMessageText(_("Get properties"));
@@ -1316,6 +1343,14 @@ com.utom.extend({
         alert.addTextLabelWithValue(_("Color format:"));
         alert.addAccessoryView(comboColorFormatBox);
 
+        var comboShowColorNameBtn = NSButton.alloc().initWithFrame(NSMakeRect(0, 0, 200, 14));
+        comboShowColorNameBtn.setButtonType(NSSwitchButton);
+        comboShowColorNameBtn.setState(false);
+        comboShowColorNameBtn.setTitle(_("Show color name"));
+        if(showColorName){
+            comboShowColorNameBtn.setState(true);
+        }
+        alert.addAccessoryView(comboShowColorNameBtn);
 
         var responseCode = alert.runModal();
 
@@ -1329,11 +1364,12 @@ com.utom.extend({
                 }
             });
 
-            this.setConfigs({property: types, propertyPosition: position, colorFormat: colorFormat});
+            this.configs = this.setConfigs({property: types, propertyPosition: position, colorFormat: colorFormat, showColorName: comboShowColorNameBtn.state() });
             return {
                 types: types,
                 position: position,
-                colorFormat: colorFormat
+                colorFormat: colorFormat,
+                showColorName: comboShowColorNameBtn.state()
             };
         }
         else{
@@ -1366,13 +1402,23 @@ com.utom.extend({
         var types = propertyConfigs.types;
         var position = propertyConfigs.position;
         var colorFormat = propertyConfigs.colorFormat;
+        var showColorName = propertyConfigs.showColorName;
 
         if(!types) return false;
+
+        if(showColorName){
+            this.getColors();
+        }
 
         var content = [];
         var layerStyle = layer.style();
 
         var colorContent = function(color){
+            var colorName = (self.configs.colors && self.configs.colors["#" + self.rgbToHex(color.r, color.g, color.b, color.a)])? self.configs.colors["#" + self.rgbToHex(color.r, color.g, color.b, color.a)]: undefined;
+            if(propertyConfigs.showColorName && colorName){
+                return colorName;
+            }
+
             if(colorFormat === 0){
                 return "#" + self.rgbToHex(color.r, color.g, color.b) + " " + Math.round(color.a * 100) + "%";
             }
@@ -1456,6 +1502,10 @@ com.utom.extend({
                     if(!self.is(layer, MSTextLayer)) return false;
                     content.push("font-size: " + self.updateLength(layer.fontSize(), true) );
                     break;
+                case "character":
+                    if(!self.is(layer, MSTextLayer)) return false;
+                    content.push("character: " + self.updateLength(layer.characterSpacing(), true) );
+                    break;
                 case "line-height":
                     if(!self.is(layer, MSTextLayer)) return false;
                     content.push("line: " + self.updateLength(layer.lineSpacing(), true) + " (" + Math.round(layer.lineSpacing() / layer.fontSize() * 10) / 10  + ")" );
@@ -1518,12 +1568,12 @@ com.utom.extend({
     toggleHidden: function(){
         if(!this.configs) return false;
 
-        var artboard = this.artboard;
+        var page = this.page;
 
         var isHidden = (this.configs.isHidden)? false : !Boolean(this.configs.isHidden);
-        this.setConfigs({isHidden: isHidden});
+        this.configs = this.setConfigs({isHidden: isHidden});
 
-        var layers = artboard.children().objectEnumerator();
+        var layers = page.children().objectEnumerator();
 
         while(item = layers.nextObject()) {
             if(this.is(item, MSLayerGroup) && this.regexName.exec(item.name())){
@@ -1534,12 +1584,12 @@ com.utom.extend({
     toggleLocked: function(){
         if(!this.configs) return false;
 
-        var artboard = this.artboard;
+        var page = this.page;
 
         var isLocked = (this.configs.isLocked)? false : !Boolean(this.configs.isLocked);
-        this.setConfigs({isLocked: isLocked});
+        this.configs = this.setConfigs({isLocked: isLocked});
 
-        var layers = artboard.children().objectEnumerator();
+        var layers = page.children().objectEnumerator();
 
         while(item = layers.nextObject()) {
             if(this.is(item, MSLayerGroup) && this.regexName.exec(item.name())){
@@ -1569,7 +1619,7 @@ com.utom.extend({
         }
 
         groupSpecs.addLayers(specLayers);
-        groupSpecs.resizeRoot(true);
+        groupSpecs.resizeToFitChildrenWithOption(0);
         groupSpecs.setIsLocked(true);
     },
     clearMeasure: function(){
@@ -1587,11 +1637,12 @@ com.utom.extend({
     },
     resetSizeGuide: function(layerGroup){
         if(this.configs.theme) return this.resetSizeGuideNop( layerGroup );
-        var layers = layerGroup.children().objectEnumerator(),
+        var smConfigs = this.getConfigs(layerGroup),
+            layers = layerGroup.children().objectEnumerator(),
             label, gap, text;
 
         while(layer = layers.nextObject()) {
-            if(this.is(layer, MSShapeGroup) && !isNaN(layer.name())) label = layer;
+            if(layer.name() == "label") label = layer;
             if(layer.name() == "gap") gap = layer;
             if(this.is(layer, MSTextLayer)) text = layer;
         }
@@ -1602,7 +1653,7 @@ com.utom.extend({
         gf = this.getFrame(gap);
         tf = this.getFrame(text);
 
-        text.setStringValue(this.updateLength(label.name()));
+        text.setStringValue(this.updateLength(smConfigs.original));
         text.setTextBehaviour(1);
         text.setTextBehaviour(0);
 
@@ -1615,17 +1666,18 @@ com.utom.extend({
         dx = (gf.x < lf.x && gf.maxX < lf.maxX)? 0: dx;
         ta.setX(tf.x - dx);
         la.setX(lf.x - dx);
-        la.setWidth( ta.width() + 8 );
+        la.setWidth( ta.width() + 7 );
 
-        layerGroup.resizeRoot(true);
+        layerGroup.resizeToFitChildrenWithOption(0);
 
         return layerGroup;
     },
     resetSizeGuideNop: function(layerGroup){
-        var layers = layerGroup.children().objectEnumerator(),
+        var smConfigs = this.getConfigs(layerGroup),
+            layers = layerGroup.children().objectEnumerator(),
             arrow, line, text;
         while(layer = layers.nextObject()) {
-            if(this.is(layer, MSShapeGroup) && !isNaN(layer.name())) arrow = layer;
+            if(layer.name() == "arrow") arrow = layer;
             if(layer.name() == "line") line = layer;
             if(this.is(layer, MSTextLayer)) text = layer;
         }
@@ -1636,7 +1688,7 @@ com.utom.extend({
         lf = this.getFrame(line);
         tf = this.getFrame(text);
 
-        text.setStringValue(this.updateLength(arrow.name()));
+        text.setStringValue(this.updateLength(smConfigs.original));
         text.setTextBehaviour(1);
         text.setTextBehaviour(0);
 
@@ -1654,28 +1706,30 @@ com.utom.extend({
 
         ta.setX(tf.x - dx);
 
-        layerGroup.resizeRoot(true);
+        layerGroup.resizeToFitChildrenWithOption(0);
 
         return layerGroup;
     },
-    resetPropertyGuide: function(layer){
-        var splitName = layer.name().split("#");
+    resetPropertyGuide: function(layerGroup){
+        var smConfigs = this.getConfigs(layerGroup);
+        var splitName = layerGroup.name().split("#");
         var msLayer = this.find(splitName[1], this.page, false, "objectID");
-        var msText = this.find(MSTextLayer, layer, false, "class");
-        var lf = this.getFrame(layer);
-        var nl = this.getProperty(msLayer, JSON.parse(msText.name())).absoluteRect();
+        var msText = this.find(MSTextLayer, layerGroup, false, "class");
+        var lf = this.getFrame(layerGroup);
+        var nl = this.getProperty(msLayer, smConfigs).absoluteRect();
 
         nl.setX(lf.x);
         nl.setY(lf.y);
+
+        return layerGroup;
     },
     resetConfigs: function(){
         if(!this.configs) return false;
         var theme = this.configs.theme;
-        var configsGroup = this.find("@Sketch Measure Configs", this.configsURL);
-        this.removeLayer(configsGroup);
-        this.getConfigs();
+        this.removeConfigs();
+        this.initConfigs();
 
-        this.setConfigs({theme: theme});
+        this.configs = this.setConfigs({theme: theme});
 
         var page = this.page;
 
@@ -1695,9 +1749,267 @@ com.utom.extend({
 
         this.configs.theme = (this.configs.theme)? 0: 1;
 
-        this.setConfigs({theme: this.configs.theme});
+        this.configs = this.setConfigs({theme: this.configs.theme});
 
         this.message(_("Remeasure all guides to see the new theme."));
+    },
+    getColors: function(output){
+        if (!this.configsColors){
+            this.configs.colors = {};
+            return false;
+        }
+
+        var colorJSON = {};
+        var colorDetailJSON = {};
+        var colorGroups = this.configsColors.layers().array().objectEnumerator();
+
+        while (colorGroup = colorGroups.nextObject()) {
+            if( this.is( colorGroup, MSLayerGroup ) ){
+                var configs = this.getConfigs(colorGroup);
+                var nameLayer = this.find(configs.nameLayer, colorGroup, false, "objectID");
+                var colorLayer = this.find(configs.colorLayer, colorGroup, false, "objectID");
+                var color = this.getFills(colorLayer.style()).pop().color;
+                var hex = "#" + this.rgbToHex(color.r, color.g, color.b);
+                var argb_hex = "#" + this.rgbToHex(color.r, color.g, color.b, color.a);
+                var name = nameLayer.stringValue();
+
+                colorDetailJSON[argb_hex] = this.extend(color, {
+                    name: name,
+                    hex: hex,
+                    argb_hex: argb_hex
+                });
+                if(name != _("untitled")){
+                    colorJSON[argb_hex] = this.toJSString(name);
+                }
+            }
+        }
+
+        this.setConfigs({colors: colorJSON});
+        this.configs.colors = colorJSON;
+        this.colors = colorDetailJSON;
+        return colorDetailJSON;
+    },
+    addColors: function(colors){
+        var self = this;
+
+        var colors = this.extend(this.colors, colors || {});
+        var pluginPath = NSString.stringWithString(self.context.scriptPath).stringByDeletingLastPathComponent();
+        var imagePath = pluginPath.stringByAppendingPathComponent("assets/transparent-background.png");
+        var transparentImage = [[NSImage alloc] initWithContentsOfFile:imagePath];
+
+        var index = 0;
+        var column = 0;
+        var row = 0;
+
+        for ( var argb_hex in colors ){
+            var color = colors[argb_hex];
+            var group = self.addGroup( self.configsColors );
+            var shape = self.addShape( group );
+            var nameText = self.addText( group );
+            var infoText = self.addText( group );
+            var name = color.name? color.name: _("untitled");
+            var shapeColor = MSColor.colorWithSVGString(color.hex);
+            shapeColor.setAlpha(color.a);
+
+            var grayscale = color.r * 0.299 + color.g * 0.587 + color.b * 0.114;
+
+            var textHex = ( grayscale >= 180 )? "#4A4A4A": "#FFFFFF";
+            textHex = (color.a <= .3)? "#4A4A4A": textHex;
+
+            var textColor =  MSColor.colorWithSVGString(textHex);
+
+            group.setName(name);
+            shape.setName("color");
+            nameText.setName("name");
+            infoText.setName("text");
+
+            shape.frame().setWidth(160);
+            shape.frame().setHeight(128);
+
+            var transparentBg = shape.style().fills().addNewStylePart();
+            transparentBg.setFillType(4);
+            transparentBg.setPatternFillType(0);
+            transparentBg.setPatternImage(transparentImage);
+
+            var colorBg = shape.style().fills().addNewStylePart();
+            colorBg.setFillType(0);
+            colorBg.color = shapeColor;
+
+            nameText.frame().setX(16);
+            nameText.frame().setY(16);
+            nameText.setTextColor(textColor);
+            nameText.setFontSize(18);
+            nameText.setFontPostscriptName("HelveticaNeue-Medium");
+            nameText.setStringValue(name);
+            nameText.setTextBehaviour(1);
+            nameText.setTextBehaviour(0);
+
+            info = [
+                "#" + self.rgbToHex(color.r, color.g, color.b) + ", " + Math.round(color.a * 100) + "%",
+                "#" + self.rgbToHex(color.r, color.g, color.b, color.a),
+                "rgba(" + color.r + "," + color.g + "," + color.b + "," + Math.round(color.a * 10) / 10 + ")"
+            ]
+
+            textColor.setAlpha(.64)
+            infoText.frame().setX(16);
+            infoText.frame().setY(48);
+            infoText.setTextColor(textColor);
+            infoText.setFontSize(14);
+            infoText.setFontPostscriptName("HelveticaNeue-Light");
+            infoText.setStringValue(info.join("\r\n"));
+            infoText.setTextBehaviour(1);
+            infoText.setTextBehaviour(0);
+
+            shape.setIsLocked(true);
+            // infoText.setIsLocked(true);
+            group.resizeToFitChildrenWithOption(0);
+            group.frame().setX( 160 * column );
+            group.frame().setY( 128 * row );
+
+            self.setConfigs({nameLayer: self.toJSString(nameText.objectID()), colorLayer: self.toJSString(shape.objectID())}, group);
+
+            if(index % 5 == 4 && column == 4){
+                if(row * 128 > 640) self.configsColors.frame().setHeight(row * 128)
+                row++
+            }
+
+            if(index % 5 == 4){
+                column = 0
+            }
+            else{
+                column++;
+            }
+            index++;
+        }
+
+    },
+    getAllColor: function(){
+        var self = this;
+        var colors = {};
+        var colorsArr = [];
+        var context = this.context;
+        var document = this.document;
+        var selection = this.selection;
+        var getColor = function(color){
+            var color = color;
+            var hex = "#" + self.rgbToHex(color.r, color.g, color.b);
+            var argb_hex = "#" + self.rgbToHex(color.r, color.g, color.b, color.a);
+            var obj = self.extend(color, {
+                name: _("untitled"),
+                hex: hex,
+                argb_hex: argb_hex
+            });
+
+            if(!colors[argb_hex]){
+                colorsArr.push(obj);
+            }
+            colors[argb_hex] = obj
+
+        };
+        var getColorType = function(fillJSON){
+            var fillJSON = fillJSON;
+            
+            if(fillJSON.fillType == "color"){
+                getColor(fillJSON.color);
+            }
+
+            if(fillJSON.fillType == "gradient"){
+                fillJSON.gradient.colorStops.forEach(function(gradient){
+                    getColor(gradient.color);
+                });
+            }
+        }
+
+        var selectionArtboards = this.find(MSArtboardGroup, selection, true, "class");
+
+        if(!selectionArtboards){
+            this.message(_("Select 1 or multiple artboards"));
+            return false;
+        }
+
+        selectionArtboards = (this.is(selectionArtboards, MSArtboardGroup))? NSArray.arrayWithObjects(selectionArtboards): selectionArtboards;
+        selectionArtboards = selectionArtboards.objectEnumerator();
+        while(msArtboard = selectionArtboards.nextObject()){
+            if(msArtboard instanceof MSArtboardGroup){
+                var layerIter = msArtboard.children().objectEnumerator();
+                while(msLayer = layerIter.nextObject()) {
+                    var msGroup = msLayer.parentGroup();
+
+                    if(msLayer && this.is(msLayer, MSLayerGroup) && /LABEL\#|NOTE\#/.exec(msLayer.name())){
+                        var msText = msLayer.children()[2];
+                        msLayer.setIsVisible(false);
+                    }
+
+                    var layerStates = this.getStates(msLayer);
+
+                    if (
+                        !this.isExportable(msLayer) ||
+                        !layerStates.isVisible ||
+                        layerStates.isLocked ||
+                        layerStates.hasSlices ||
+                        this.isMeasure(msLayer)
+                    )
+                    {
+                        continue;
+                    }
+
+                    if ( !this.is(msLayer, MSSliceLayer) ) {
+                        var layerStyle = msLayer.style();
+
+
+                        var fillsJSON = this.getFills(layerStyle);
+                        if(fillsJSON.length > 0){
+                            var fillJSON = fillsJSON.pop();
+                            getColorType(fillJSON)
+
+                        }
+
+                        var bordersJSON = self.getBorders(layerStyle);
+                        if(bordersJSON.length > 0){
+                            var borderJSON = bordersJSON.pop();
+                            getColorType(borderJSON)
+                        }
+
+                    }
+
+                    if ( this.is(msLayer, MSTextLayer) ) {
+                        getColor(self.colorToJSON(msLayer.textColor()))
+                    }
+                }
+            }
+        }
+
+        return colors
+    },
+    colorPalette: function(){
+        if(!this.configs) return false;
+
+        var currentPage = this.page;
+        if(this.configsPage == false){
+            this.configsPage = this.document.addBlankPage();
+            this.configsPage.setName("Sketch Measure");
+            this.document.setCurrentPage(currentPage);
+        }
+
+        this.configsColors = this.find("Color Palette", this.configsPage);
+        this.configsColors = (!this.configsColors || this.is(this.configsColors, MSArtboardGroup))? this.configsColors: undefined;
+        
+        if( this.configsColors ){
+            this.getColors()
+            this.removeLayer(this.configsColors);
+        }
+        this.configsColors = MSArtboardGroup.new();
+        frame = this.configsColors.frame();
+        frame.setWidth(800);
+        frame.setHeight(640);
+        frame.setConstrainProportions(false);
+        this.configsPage.addLayers([this.configsColors]);
+        this.configsColors.setName("Color Palette");
+        this.document.setCurrentPage(this.configsPage);
+
+
+        this.addColors(this.getAllColor());
+
     }
 });
 
@@ -1778,33 +2090,40 @@ com.utom.extend({
 });  
 
 com.utom.extend({
+    slicesPath: undefined,
     maskObjectID: undefined,
-    sliceObjectID: undefined,
+    maskRect: undefined,
+    symbols: {},
     isExportable: function(layer) {
         return this.is(layer, MSTextLayer) ||
                this.is(layer, MSShapeGroup) ||
                this.is(layer, MSBitmapLayer) ||
                this.is(layer, MSSliceLayer) ||
+               this.is(layer, MSSymbolInstance) ||
                this.is(layer, MSLayerGroup) && this.hasExportSizes(layer)
     },
     isMeasure: function(layer){
         var msGroup = layer.parentGroup();
         return (this.regexName.exec(msGroup.name()));
     },
-    isEnabled: function(layer){
-        while (!this.is(layer, MSArtboardGroup)) {
-            var msGroup = layer.parentGroup();
+    getStates: function(layer){
+        var isVisible = true;
+        var isLocked = false;
+        var hasSlices = false;
+        var isMaskChildLayer = false;
 
+        while (!( this.is(layer, MSArtboardGroup) || this.is(layer, MSSymbolMaster) ) ) {
+            var msGroup = layer.parentGroup();
             if (!layer.isVisible()) {
-                return true;
+                isVisible = false;
             }
 
             if (layer.isLocked()) {
-                return true;
+                isLocked = true;
             }
 
             if ( this.is(msGroup, MSLayerGroup) && this.hasExportSizes(msGroup) ) {
-                return true;
+                hasSlices = true
             }
 
             if (
@@ -1812,16 +2131,71 @@ com.utom.extend({
                 msGroup.objectID() == this.maskObjectID &&
                 !layer.shouldBreakMaskChain()
             ) {
-                return true;
+                isMaskChildLayer = true
             }
 
             layer = msGroup;
         }
+        return {
+            isVisible: isVisible,
+            isLocked: isLocked,
+            hasSlices: hasSlices,
+            isMaskChildLayer: isMaskChildLayer
+        }
+    },
+    updateMaskRect: function(layer) {
+        var layer = this.extend(layer, {});
+        layer.maxX = layer.x + layer.width;
+        layer.maxY = layer.y + layer.height;
+        var mask = this.extend(this.maskRect, {});
+        mask.maxX = mask.x + mask.width;
+        mask.maxY = mask.y + mask.height;
+        var x = layer.x;
+        var y = layer.y;
+        var width = layer.width;
+        var height = layer.height;
+        var dx = 0;
+        var dy = 0;
 
-        return false;
+        if(this.isIntersect(layer, mask)){
+            if(layer.x < mask.x){
+                x = mask.x;
+                dx = mask.x - layer.x;
+            }
+
+            if(layer.y < mask.y){
+                y = mask.y;
+                dy = mask.y - layer.y;
+            }
+
+            if(layer.maxX > mask.maxX){
+                width = width - (layer.maxX - mask.maxX) - dx;
+            }
+            else{
+                width = width - dx;
+            }
+
+            if(layer.maxY > mask.maxY){
+                height = height - (layer.maxY - mask.maxY) - dy;
+            }
+            else{
+                height = height - dy;
+            }
+
+            return {
+                x: x,
+                y: y,
+                width: width,
+                height: height
+            }
+        }
+        else{
+            return false
+        }
+
     },
     hasExportSizes: function(layer){
-        return layer.exportOptions().sizes().count() > 0;
+        return layer.exportOptions().exportFormats().count() > 0;
     },
     toJSString: function(str){
         return new String(str).toString();
@@ -1894,23 +2268,25 @@ com.utom.extend({
         };
     },
     exportSizesToJSON: function(size, layer, slicesPath) {
-        var slice = MSSliceMaker.slicesFromExportableLayer(layer).firstObject();
-        slice.scale = size.scale();
-        slice.format = size.format();
+        var slice = MSExportRequest.exportRequestsFromExportableLayer(layer).firstObject();
+        var size = this.toJSString(size).split(" ");
+        var document = this.document;
+        slice.scale = size[0];
+        slice.format = size[2];
 
-        var suffix = this.toJSString(size.name());
+        var suffix = this.toJSString(size[1]);
         suffix = (suffix)? suffix : "";
 
-        var sliceName = this.toJSString(layer.name() + suffix + "." + size.format());
+        var sliceName = this.toJSString(layer.name() + suffix + "." + size[2]);
         var sliceFileName = slicesPath.stringByAppendingPathComponent( sliceName );
 
-        [[MSSliceExporter dataForRequest: slice] writeToFile: sliceFileName atomically:true];
+        [document saveArtboardOrSlice:slice toFile:sliceFileName];
 
         return {
             sliceName: "slices/" + sliceName,
-            scale: this.toJSString(size.scale()),
+            scale: size[0],
             suffix: suffix,
-            format: this.toJSString(size.format())
+            format: size[2]
         };
     },
     getBorders: function(style) {
@@ -2002,17 +2378,24 @@ com.utom.extend({
         if(!style) return "";
         return this.toJSString(style.name());
     },
-    exportSizes: function(layer, slicesPath){
-        var exportSizes = [],
-            size, sizesInter = layer.exportOptions().sizes().array().objectEnumerator();
+    exportSizes: function(layer, savePath){
+        var self = this,
+            exportSizes = [],
+            size, sizesInter = layer.exportOptions().exportFormats().array().objectEnumerator();
 
         while (size = sizesInter.nextObject()) {
-            exportSizes.push(this.exportSizesToJSON(size, layer, slicesPath));
+            if (!self.slicesPath){
+                var slicesPath = savePath.stringByAppendingPathComponent("slices");
+                self.slicesPath = slicesPath;
+                [[NSFileManager defaultManager] createDirectoryAtPath:slicesPath withIntermediateDirectories:true attributes:nil error:nil];
+            }
+
+            exportSizes.push(this.exportSizesToJSON(size, layer, self.slicesPath));
         }
 
         return exportSizes;
     },
-    savePath: function(){
+    getSavePath: function(){
         var filePath = this.document.fileURL()? this.document.fileURL().path().stringByDeletingLastPathComponent(): "~";
         var fileName = this.document.displayName().stringByDeletingPathExtension();
         var savePanel = NSSavePanel.savePanel();
@@ -2029,122 +2412,125 @@ com.utom.extend({
 
         return savePanel.URL().path();
     },
-    specExport: function(){
-        if(!this.configs) return false;
-
+    getArtboard: function( msArtboard, savePath, symbolOffset ){
         var context = this.context;
         var document = this.document;
         var selection = this.selection;
 
-        var selectionArtboards = this.find(MSArtboardGroup, selection, true, "class");
+        var tempCon = this.templateContents.tempCon;
+        var jqCon = this.templateContents.jqCon;
+        var jsappCon = this.templateContents.jsappCon;
+        var specCon = this.templateContents.specCon;
+        var cssnorCon = this.templateContents.cssnorCon;
+        var cssappCon = this.templateContents.cssappCon;
 
-        if(!selectionArtboards){
-            this.message(_("Select 1 or multiple artboards"));
-            return false;
-        }
+        if(msArtboard instanceof MSArtboardGroup || msArtboard instanceof MSSymbolMaster){
+            var artboardFrame = msArtboard.frame();
+            var layers = [];
+            var notes = [];
+            var layerIter = msArtboard.children().objectEnumerator();
+            var name = msArtboard.objectID();
 
-        var savePath = this.savePath();
-        if(!savePath) return false;
-        [[NSFileManager defaultManager] createDirectoryAtPath:savePath withIntermediateDirectories:true attributes:nil error:nil];
+            while(msLayer = layerIter.nextObject()) {
+                var msGroup = msLayer.parentGroup();
 
-        var slicesPath = savePath.stringByAppendingPathComponent("slices");
-        [[NSFileManager defaultManager] createDirectoryAtPath:slicesPath withIntermediateDirectories:true attributes:nil error:nil];
+                if(msLayer && this.is(msLayer, MSLayerGroup) && /LABEL\#|NOTE\#/.exec(msLayer.name())){
+                    var msText = msLayer.children()[2];
 
-        var resolution = this.configs.resolution;
+                    notes.push({
+                        rect: this.rectToJSON(msLayer.absoluteRect(), artboardFrame),
+                        note: this.toJSString(msText.stringValue()).replace(/\n/g,"<br>")
+                    });
 
-        var pluginPath = NSString.stringWithString(this.context.scriptPath).stringByDeletingLastPathComponent();
-        var template1Path = pluginPath.stringByAppendingPathComponent("assets/part-1");
-        var template2Path = pluginPath.stringByAppendingPathComponent("assets/part-2");
-        var template1 = [NSString stringWithContentsOfFile:template1Path encoding:NSUTF8StringEncoding error:nil];
-        var template2 = [NSString stringWithContentsOfFile:template2Path encoding:NSUTF8StringEncoding error:nil];
-
-        var artboardsData = [];
-        var slicesData = [];
-
-        selectionArtboards = (this.is(selectionArtboards, MSArtboardGroup))? NSArray.arrayWithObjects(selectionArtboards): selectionArtboards;
-        selectionArtboards = selectionArtboards.objectEnumerator();
-
-        while(msArtboard = selectionArtboards.nextObject()){
-            if(msArtboard instanceof MSArtboardGroup){
-                var artboardFrame = msArtboard.frame();
-                var layers = [];
-                var notes = [];
-                var layerIter = msArtboard.children().objectEnumerator();
-                var name = msArtboard.objectID();
-
-                while(msLayer = layerIter.nextObject()) {
-                    var msGroup = msLayer.parentGroup();
-                    if(msLayer && this.is(msLayer, MSLayerGroup) && /LABEL\#|NOTE\#/.exec(msLayer.name())){
-                        var msText = msLayer.children()[2];
-
-                        notes.push({
-                            rect: this.rectToJSON(msLayer.absoluteRect(), artboardFrame),
-                            note: this.toJSString(msText.stringValue())
-                        });
-
-                        msLayer.setIsVisible(false);
-                    }
-
-                    if (
-                        !this.isExportable(msLayer) ||
-                        this.isEnabled(msLayer) ||
-                        this.isMeasure(msLayer)
-                    )
-                    {
-                        continue;
-                    }
-
-                    if(msLayer.hasClippingMask()){
-                        this.maskObjectID = msGroup.objectID();
-                    }
-                    else if (this.maskObjectID != msGroup.objectID() || msLayer.shouldBreakMaskChain()) {
-                        this.maskObjectID = undefined;
-                    }
-
-                    var layer = {};
-
-                    var type = this.is(msLayer, MSTextLayer) ? "text" : "shape";
-                    type = this.hasExportSizes(msLayer) || this.is(msLayer, MSSliceLayer) ? "slice" : type;
-
-                    layer.objectID = this.toJSString(msLayer.objectID());
-                    layer.type = type;
-                    layer.name = this.toJSString(msLayer.name());
-                    layer.rect = this.rectToJSON(msLayer.absoluteRect(), artboardFrame);
-                    layer.exportSizes = this.exportSizes(msLayer, slicesPath);
-
-                    if ( !this.is(msLayer, MSSliceLayer) ) {
-                        log( msLayer )
-                        var layerStyle = msLayer.style();
-
-                        layer.rotation = msLayer.rotation();
-                        layer.radius = ( msLayer.layers && this.is(msLayer.layers().firstObject(), MSRectangleShape) ) ? msLayer.layers().firstObject().fixedRadius(): null;
-                        layer.borders = this.getBorders(layerStyle);
-                        layer.fills = this.getFills(layerStyle);
-                        layer.shadows = this.getShadows(layerStyle);
-                        layer.opacity = this.getOpacity(layerStyle);
-                        layer.styleName = (this.is(msLayer, MSTextLayer))? this.getStyleName(layerStyle, true): this.getStyleName(layerStyle);
-                    }
-
-                    if ( this.is(msLayer, MSTextLayer) ) {
-                        layer.content = this.toJSString(msLayer.storage().string()),
-                        layer.color = this.colorToJSON(msLayer.textColor());
-                        layer.fontSize = msLayer.fontSize();
-                        layer.fontFace = this.toJSString(msLayer.fontPostscriptName());
-                        layer.textAlign = this.TextAligns[msLayer.textAlignment()];
-                        layer.letterSpacing = msLayer.characterSpacing();
-                        layer.lineHeight = msLayer.lineSpacing();
-                    }
-
-                    if ( type ===  "slice" ) slicesData.push(layer);
-
-                    layers.push(layer);
-
+                    msLayer.setIsVisible(false);
                 }
 
+                var layerStates = this.getStates(msLayer);
+
+                if (
+                    !this.isExportable(msLayer) ||
+                    !layerStates.isVisible ||
+                    layerStates.isLocked ||
+                    layerStates.hasSlices ||
+                    this.isMeasure(msLayer)
+                )
+                {
+                    continue;
+                }
+
+                var type = this.is(msLayer, MSTextLayer) ? "text" : "shape";
+                type = this.is(msLayer, MSSymbolInstance) ? "symbol" : type;
+                type = this.hasExportSizes(msLayer) || this.is(msLayer, MSSliceLayer) ? "slice" : type;
+
+                var layer = {};
+                layer.objectID = this.toJSString(msLayer.objectID());
+                layer.type = type;
+                layer.name = this.toJSString(msLayer.name());
+                layer.rect = this.rectToJSON(msLayer.absoluteRect(), artboardFrame);
+                if(symbolOffset){
+                    layer.rect.x = symbolOffset.x + layer.rect.x;
+                    layer.rect.y = symbolOffset.y + layer.rect.y;
+                }
+                layer.exportSizes = this.exportSizes(msLayer, savePath);
+
+                if ( ! ( this.is(msLayer, MSSliceLayer) || this.is(msLayer, MSSymbolInstance) ) ) {
+                    var layerStyle = msLayer.style();
+
+                    layer.rotation = msLayer.rotation();
+                    layer.radius = ( msLayer.layers && this.is(msLayer.layers().firstObject(), MSRectangleShape) ) ? msLayer.layers().firstObject().fixedRadius(): null;
+                    layer.borders = this.getBorders(layerStyle);
+                    layer.fills = this.getFills(layerStyle);
+                    layer.shadows = this.getShadows(layerStyle);
+                    layer.opacity = this.getOpacity(layerStyle);
+                    layer.styleName = (this.is(msLayer, MSTextLayer))? this.getStyleName(layerStyle, true): this.getStyleName(layerStyle);
+                }
+
+                if ( this.is(msLayer, MSTextLayer) ) {
+                    layer.content = this.toJSString(msLayer.storage().string()),
+                    layer.color = this.colorToJSON(msLayer.textColor());
+                    layer.fontSize = msLayer.fontSize();
+                    layer.fontFace = this.toJSString(msLayer.fontPostscriptName());
+                    layer.textAlign = this.TextAligns[msLayer.textAlignment()];
+                    layer.letterSpacing = msLayer.characterSpacing();
+                    layer.lineHeight = msLayer.lineHeight();
+                }
+
+
+                if(msLayer.hasClippingMask()){
+                    this.maskObjectID = msGroup.objectID();
+                    this.maskRect = this.rectToJSON(msLayer.absoluteRect(), artboardFrame);
+                }
+                else if (this.maskObjectID != msGroup.objectID() || msLayer.shouldBreakMaskChain()) {
+                    this.maskObjectID = undefined;
+                    this.maskRect = undefined;
+                }
+
+                if ( type ===  "slice" ){
+                    this.slicesData.push(layer);
+                }
+
+                if (layerStates.isMaskChildLayer){
+                    layer.rect = this.updateMaskRect(layer.rect)
+                }
+
+                if (layer.rect){
+                    layers.push(layer);
+                }
+
+                if( this.is(msLayer, MSSymbolInstance) ){
+                    var symbolLayers = this.getArtboard(msLayer.symbolMaster(), savePath, {x: layer.rect.x, y: layer.rect.y});
+                    symbolLayers.forEach(function(layer){
+                        layers.push(layer);
+                    });
+                }
+            }
+
+            if(!symbolOffset){
                 var imageFileName = name + ".png";
                 var imagePath = this.toJSString( NSTemporaryDirectory().stringByAppendingPathComponent(imageFileName) );
-
-                [document saveArtboardOrSlice: msArtboard
+                var sliceArtboard = MSExportRequest.exportRequestsFromExportableLayer(msArtboard).firstObject();
+                sliceArtboard.scale = 2
+                [document saveArtboardOrSlice: sliceArtboard
                     toFile: imagePath ];
 
                 var imageURL = NSURL.fileURLWithPath(imagePath);
@@ -2159,17 +2545,25 @@ com.utom.extend({
                     height: artboardFrame.height()
                 };
 
-                artboardsData.push(artboardData);
+                this.artboardsData.push(artboardData);
 
 
                 var data = this.extend(artboardData, {
-                    resolution: resolution,
+                    resolution: this.configs.resolution,
                     zoom: 1,
                     layers: layers,
                     notes: notes
                 });
 
-                var content = template1 + "jQuery(function(){Spec(" + JSON.stringify(data).replace(/\u2028/g,'\\u2028').replace(/\u2029/g,'\\u2029') + ").artboardList(window.artboards || undefined).sliceList(window.slices || undefined)});" + template2;
+                var specContent = this.template(specCon, {json: JSON.stringify(data).replace(/\u2028/g,'\\u2028').replace(/\u2029/g,'\\u2029')});
+
+                var content = this.template(tempCon, {
+                    cssNormalize: cssnorCon,
+                    cssApp: cssappCon,
+                    jsjQuery: jqCon,
+                    jsApp: jsappCon,
+                    jsSpec: specContent
+                });
                 content = NSString.stringWithString(content);
                 var artname = this.toJSString( msArtboard.name() ).replace(/[\/\\]/g, "-");
                 var exportURL = savePath.stringByAppendingPathComponent( artname + ".html");
@@ -2179,12 +2573,67 @@ com.utom.extend({
                             encoding: NSUTF8StringEncoding
                                error: null];
             }
-            
+            else{
+                return layers
+            }
+        }
+    },
+    artboardsData: [],
+    slicesData: [],
+    specExport: function(){
+        if(!this.configs) return false;
+
+        var context = this.context;
+        var document = this.document;
+        var selection = this.selection;
+
+        var selectionArtboards = this.find(MSArtboardGroup, selection, true, "class");
+
+        if(!selectionArtboards){
+            this.message(_("Select 1 or multiple artboards"));
+            return false;
+        }
+
+        savePath = this.getSavePath();
+        if(!savePath) return false;
+        [[NSFileManager defaultManager] createDirectoryAtPath:savePath withIntermediateDirectories:true attributes:nil error:nil];
+
+        var pluginPath = NSString.stringWithString(this.context.scriptPath).stringByDeletingLastPathComponent();
+        var tempPath = pluginPath.stringByAppendingPathComponent("assets/template.html");
+        var jqPath = pluginPath.stringByAppendingPathComponent("assets/jquery-1.12.0.min.js");
+        var jsappPath = pluginPath.stringByAppendingPathComponent("assets/app.js");
+        var specPath = pluginPath.stringByAppendingPathComponent("assets/spec.js");
+        var cssnorPath = pluginPath.stringByAppendingPathComponent("assets/normalize-3.0.3.min.css");
+        var cssappPath = pluginPath.stringByAppendingPathComponent("assets/app.css");
+
+        var tempCon = [NSString stringWithContentsOfFile:tempPath encoding:NSUTF8StringEncoding error:nil];
+        var jqCon = [NSString stringWithContentsOfFile:jqPath encoding:NSUTF8StringEncoding error:nil];
+        var jsappCon = [NSString stringWithContentsOfFile:jsappPath encoding:NSUTF8StringEncoding error:nil];
+        var specCon = [NSString stringWithContentsOfFile:specPath encoding:NSUTF8StringEncoding error:nil];
+        var cssnorCon = [NSString stringWithContentsOfFile:cssnorPath encoding:NSUTF8StringEncoding error:nil];
+        var cssappCon = [NSString stringWithContentsOfFile:cssappPath encoding:NSUTF8StringEncoding error:nil];
+        this.templateContents = {
+            tempCon: tempCon,
+            jqCon: jqCon,
+            jsappCon: jsappCon,
+            specCon: specCon,
+            cssnorCon: cssnorCon,
+            cssappCon: cssappCon
+        }
+
+        selectionArtboards = (this.is(selectionArtboards, MSArtboardGroup))? NSArray.arrayWithObjects(selectionArtboards): selectionArtboards;
+        selectionArtboards = selectionArtboards.objectEnumerator();
+
+        while(msArtboard = selectionArtboards.nextObject()){
+            this.getArtboard(msArtboard, savePath);
         }
 
         var sliceLayers = this.page.exportableLayers();
 
-        if(slicesData.length > 1){
+        var artboardsData = this.artboardsData;
+        var slicesData = this.slicesData;
+
+        if(slicesData.length > 0){
             var sContent = NSString.stringWithString("var slices = " + JSON.stringify(slicesData) + ";");
             var sExportURL = savePath.stringByAppendingPathComponent( "slices.js");
             [sContent writeToFile: sExportURL
@@ -2192,6 +2641,7 @@ com.utom.extend({
                                 encoding: NSUTF8StringEncoding
                                    error: null];
         }
+
         if(artboardsData.length > 1){
             var aContent = NSString.stringWithString("var artboards = " + JSON.stringify(artboardsData) + ";");
             var aExportURL = savePath.stringByAppendingPathComponent( "artboards.js");
@@ -2201,7 +2651,28 @@ com.utom.extend({
                                 encoding: NSUTF8StringEncoding
                                    error: null];
         }
+
+        if(this.configsColors){
+            this.getColors();
+            var cContent = NSString.stringWithString("var colors = " + JSON.stringify(this.configs.colors) + ";");
+            var cExportURL = savePath.stringByAppendingPathComponent( "colors.js");
+
+            [cContent writeToFile: cExportURL
+                              atomically: false
+                                encoding: NSUTF8StringEncoding
+                                   error: null];
+        }
         this.message(_("Export complete!"));
 
+    },
+    template: function(content, data) {
+        var content = content.replace(new RegExp("\\<\\!\\-\\-\\s([^\\s\\-\\-\\>]+)\\s\\-\\-\\>", "gi"), function($0, $1) {
+            if ($1 in data) {
+                return data[$1];
+            } else {
+                return $0;
+            }
+        });
+        return content;
     }
 });
